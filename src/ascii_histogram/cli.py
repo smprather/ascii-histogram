@@ -10,22 +10,22 @@ click.rich_click.GROUP_ARGUMENTS_OPTIONS = False
 @click.command()
 @click.argument("file", type=click.Path(exists=True, readable=True))
 @click.option(
-    "--num-buckets", "-n",
-    default=31, show_default=True,
+    "--min-buckets", "-n",
+    default=21, show_default=True,
     type=click.IntRange(min=1),
-    help="Number of buckets.",
+    help="Minimum number of buckets; the primary auto-sizing knob.",
 )
 @click.option(
     "--bucket-size", "-s",
-    default=10.0, show_default=True,
+    default=None,
     type=float,
-    help="Width of each bucket.",
+    help="Bucket width. Auto-sized from the data when omitted.",
 )
 @click.option(
     "--middle-value", "-m",
-    default=0.0, show_default=True,
+    default=None,
     type=float,
-    help="Value aligned to the centre of the middle bucket.",
+    help="Value at the centre of the middle bucket. Derived from the median when omitted.",
 )
 @click.option(
     "--max-bar-width", "-b",
@@ -53,19 +53,39 @@ click.rich_click.GROUP_ARGUMENTS_OPTIONS = False
     is_flag=True, default=False,
     help="Print per-dataset statistics after the histogram.",
 )
-def main(file, num_buckets, bucket_size, middle_value, max_bar_width, columns, label, units, show_stats):
+def main(file, min_buckets, bucket_size, middle_value, max_bar_width, columns, label, units, show_stats):
     """Generate an ASCII histogram from a data file.
 
     FILE is a whitespace-delimited text file with one observation per row.
     Multiple columns can be plotted side-by-side using [bold]--columns[/bold].
+
+    Bucket size and placement are [bold]auto-sized by default[/bold] using the
+    10th–90th percentile range, so extreme outliers never distort the scale —
+    they land in the ±Inf edge buckets instead.  Use [bold]--bucket-size[/bold]
+    to override the width and [bold]--middle-value[/bold] to pin the centre.
     """
     cols = [int(c.strip()) for c in columns.split(",")]
     raw_sets = Histogram.read_data_file(file, columns=cols)
 
-    h = Histogram(
-        num_buckets=num_buckets,
+    # Auto-size from the combined data of all columns; any manually supplied
+    # value is passed through and left unchanged.
+    combined = [x for raw in raw_sets for x in raw]
+    final_bs, final_nb, final_mv = Histogram.auto_size(
+        combined,
+        min_buckets=min_buckets,
         bucket_size=bucket_size,
         middle_value=middle_value,
+    )
+
+    click.echo(
+        f"[auto] bucket_size={final_bs}, num_buckets={final_nb}, middle_value={final_mv}",
+        err=True,
+    )
+
+    h = Histogram(
+        num_buckets=final_nb,
+        bucket_size=final_bs,
+        middle_value=final_mv,
         max_bar_height=max_bar_width,
     )
 

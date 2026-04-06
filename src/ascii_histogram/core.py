@@ -1,6 +1,36 @@
 import math
 
 
+# ---------------------------------------------------------------------------
+# Helpers for auto-sizing
+# ---------------------------------------------------------------------------
+
+def _nice_ceil(x):
+    """Round x up to the nearest value in the {1, 2, 5} × 10^k series."""
+    if x <= 0:
+        return 1.0
+    exp = math.floor(math.log10(x))
+    norm = x / (10.0 ** exp)
+    # Small epsilon guards against floating-point values like 1.9999999 → 2.
+    if norm <= 1.0 + 1e-9:
+        nice = 1.0
+    elif norm <= 2.0 + 1e-9:
+        nice = 2.0
+    elif norm <= 5.0 + 1e-9:
+        nice = 5.0
+    else:
+        nice = 10.0
+    return nice * (10.0 ** exp)
+
+
+def _next_odd(n):
+    n = int(math.ceil(n))
+    return n if n % 2 == 1 else n + 1
+
+
+# ---------------------------------------------------------------------------
+
+
 class Stats:
     def __init__(self, data_set, sum_=None):
         if sum_ is None:
@@ -113,6 +143,62 @@ class Histogram:
     def get_SI_degree(f):
         return 0 if abs(f) < 1e-18 else math.floor((math.log10(abs(f)) + 1.0) / 3.0)
 
+    @staticmethod
+    def auto_size(data, min_buckets=21, bucket_size=None, middle_value=None):
+        """Derive (bucket_size, num_buckets, middle_value) from *data*.
+
+        Uses the 10th–90th percentile range so that extreme outliers never
+        inflate the bucket width or count — they simply land in the ±Inf edge
+        buckets.  Pass *bucket_size* or *middle_value* to pin those values
+        while still letting the others be derived automatically.
+        """
+        n = len(data)
+        if n == 0:
+            return (bucket_size or 1.0), min_buckets, (middle_value or 0.0)
+
+        sd = sorted(data)
+
+        def pct(p):
+            idx = (n - 1) * p / 100.0
+            lo = int(idx)
+            hi = min(lo + 1, n - 1)
+            return sd[lo] + (idx - lo) * (sd[hi] - sd[lo])
+
+        median_val = pct(50)
+
+        # Use the 10th–90th range as a robust spread estimate; fall back to
+        # wider percentiles and finally to the full range if data is very tight.
+        bulk_range = pct(90) - pct(10)
+        if bulk_range == 0:
+            bulk_range = pct(95) - pct(5)
+        if bulk_range == 0:
+            bulk_range = sd[-1] - sd[0]
+
+        if bucket_size is None:
+            bucket_size = 1.0 if bulk_range == 0 else _nice_ceil(bulk_range / min_buckets)
+
+        if middle_value is None:
+            if bulk_range == 0:
+                middle_value = float(sd[0])
+            else:
+                # Snap so that bucket EDGES land on clean multiples of bucket_size.
+                # Edges are at middle_value ± k*bucket_size ± bucket_size/2, so we
+                # need middle_value ≡ bucket_size/2 (mod bucket_size).
+                middle_value = (
+                    round((median_val - bucket_size / 2.0) / bucket_size) * bucket_size
+                    + bucket_size / 2.0
+                )
+
+        if bulk_range == 0:
+            num_buckets = 1
+        else:
+            n_interior = math.ceil(bulk_range / bucket_size)
+            # +4 = 2 overflow edge buckets + 2 cushion so the bulk sits
+            # comfortably inside the interior buckets.
+            num_buckets = max(min_buckets, _next_odd(n_interior + 4))
+
+        return bucket_size, num_buckets, middle_value
+
     def reduce_num_buckets_till_n_percent_in_edge(self, n, reduce_per_iter=2, min_buckets=3):
         n /= 100.0
         self.bucketize()
@@ -183,8 +269,11 @@ class Histogram:
             out_cols[1][i] = "->"
 
         def bucket_edge_format(x):
-            degree = (10 ** Histogram.get_degree(self.bucket_size)) * 10000.0
-            return round(x * degree) / degree
+            # Round to the number of decimal places implied by bucket_size:
+            # bucket_size=10→0 decimals, 1→0, 0.1→1, 0.005→3, etc.
+            dp = max(0, -math.floor(math.log10(self.bucket_size))) if self.bucket_size > 0 else 0
+            v = round(x, dp)
+            return int(v) if dp == 0 else v
 
         # First row: -Inf -> <upper edge of first bucket>
         out_cols[0][0] = "-Inf"
