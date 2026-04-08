@@ -51,8 +51,10 @@ buckets without stretching the scale.*
   inflate the bucket count or width
 - **Clean edges** — bucket boundaries always fall on exact multiples of the
   bucket size (e.g. −75, −70, −65…, not −77.5, −72.5…)
-- **Middle-anchored** — buckets are centred on a reference value derived from
-  the median; override with `--middle-value` if needed
+- **Edge-trimmed** — empty interior buckets adjacent to `±Inf` are
+  automatically collapsed into the overflow bins, so the visible range tracks
+  the actual data rather than the median; use `--no-trim-edges` to centre on
+  the median instead, or `--middle-value` to pin the centre explicitly
 - **Multi-dataset side-by-side** — plot several columns from the same file in
   one table
 - **Optional statistics** — mean, σ, σ_high, σ_low, min, max per dataset
@@ -110,6 +112,7 @@ result manually if needed.
 | `--label` | `-l` | — | Dataset label (repeat for multiple columns) |
 | `--units` | `-u` | — | Units suffix appended to statistics values |
 | `--stats` | | | Print per-dataset statistics after the histogram |
+| `--trim-edges` / `--no-trim-edges` | | `--trim-edges` | Shift window to eliminate empty edge buckets; `--no-trim-edges` centres on median instead (ignored when `--middle-value` is set) |
 | `--help` | | | Show help and exit |
 
 ### Examples
@@ -155,7 +158,7 @@ print(f"min={h.global_min()}  max={h.global_max()}")
 print(h.gen_histogram())
 ```
 
-### `Histogram.auto_size(data, min_buckets=21, bucket_size=None, middle_value=None)`
+### `Histogram.auto_size(data, min_buckets=21, bucket_size=None, middle_value=None, trim_empty_edges=True)`
 
 Returns `(bucket_size, num_buckets, middle_value)`.  Any non-`None` argument
 is treated as fixed; the rest are derived automatically.
@@ -165,6 +168,7 @@ is treated as fixed; the rest are derived automatically.
 | `bucket_size` | `nice_ceil((q90 − q10) / min_buckets)` — rounded up to nearest {1, 2, 5} × 10ᵏ |
 | `middle_value` | Median snapped so bucket *edges* land on exact multiples of `bucket_size` |
 | `num_buckets` | Covers q10–q90 with cushion; always ≥ `min_buckets` and always odd |
+| `trim_empty_edges` | When `True` (default), shifts the window so no empty interior buckets sit adjacent to `±Inf`; symmetric padding is left unchanged; ignored when `middle_value` is explicit |
 
 Falls back to wider percentiles (q5–q95, then full range) when the central
 band is zero-width, and to a single bucket when all values are identical.
