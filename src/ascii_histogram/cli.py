@@ -53,7 +53,13 @@ click.rich_click.GROUP_ARGUMENTS_OPTIONS = False
     is_flag=True, default=False,
     help="Print per-dataset statistics after the histogram.",
 )
-def main(file, min_buckets, bucket_size, middle_value, max_bar_width, columns, label, units, show_stats):
+@click.option(
+    "--trim-edges/--no-trim-edges",
+    default=True, show_default=True,
+    help="Shift the bucket window so no empty interior bins sit adjacent to the "
+         "±Inf overflow buckets.  Ignored when [bold]--middle-value[/bold] is set.",
+)
+def main(file, min_buckets, bucket_size, middle_value, max_bar_width, columns, label, units, show_stats, trim_edges):
     """Generate an ASCII histogram from a data file.
 
     FILE is a whitespace-delimited text file with one observation per row.
@@ -75,6 +81,7 @@ def main(file, min_buckets, bucket_size, middle_value, max_bar_width, columns, l
         min_buckets=min_buckets,
         bucket_size=bucket_size,
         middle_value=middle_value,
+        trim_empty_edges=trim_edges,
     )
 
     click.echo(
