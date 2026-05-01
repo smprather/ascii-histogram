@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `Histogram.auto_size(data, min_buckets, bucket_size, middle_value, trim_empty_edges=True)`
+  now includes an optional `trim_empty_edges` parameter. When enabled (default),
+  the bucket window is shifted to eliminate asymmetric empty interior buckets
+  adjacent to the `±Inf` overflow bins.
+- CLI: `--trim-edges / --no-trim-edges` flags to control the new edge-trimming
+  behavior.
 - `Histogram.auto_size(data, min_buckets, bucket_size, middle_value)` — derives
   bucket parameters from data using the 10th–90th percentile range; robust to
   outliers, which land in `±Inf` edge buckets without inflating the scale

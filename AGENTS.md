@@ -142,7 +142,7 @@ Histogram.get_degree(f) -> int          # round(log10(|f|))
 Histogram.get_SI_degree(f) -> int       # floor((log10(|f|)+1)/3)
 ```
 
-#### `Histogram.auto_size(data, min_buckets=21, bucket_size=None, middle_value=None)`
+#### `Histogram.auto_size(data, min_buckets=21, bucket_size=None, middle_value=None, trim_empty_edges=True)`
 
 **Returns:** `(bucket_size, num_buckets, middle_value)` — any non-None arg is pinned.
 
@@ -162,6 +162,8 @@ Histogram.get_SI_degree(f) -> int       # floor((log10(|f|)+1)/3)
    ELSE: n_interior = ceil(bulk_range / bucket_size)
          num_buckets = max(min_buckets, _next_odd(n_interior + 4))
          # +4 = 2 edge overflow + 2 cushion
+6. IF trim_empty_edges is True AND middle_value was not explicit:
+     Shift middle_value to collapse empty interior buckets adjacent to ±Inf.
 ```
 
 **Outlier handling:** outliers naturally land in edge buckets (step 5 ignores them entirely). `num_buckets` is NEVER inflated for outliers.
@@ -222,12 +224,13 @@ ascii-histogram [OPTIONS] FILE
 | `--label` | `-l` | — | Multiple; default `colN` |
 | `--units` | `-u` | `""` | Appended to stats values |
 | `--stats` | — | False | Prints mean/sigma/etc per dataset to stdout |
+| `--trim-edges` | — | True | Shift window to eliminate empty edge buckets |
 
 **Flow:**
 1. Parse `columns` → `cols: list[int]`
 2. `Histogram.read_data_file(file, columns=cols)` → `raw_sets`
 3. `combined = [x for raw in raw_sets for x in raw]`  ← all columns pooled for auto_size
-4. `Histogram.auto_size(combined, min_buckets, bucket_size, middle_value)` → finals
+4. `Histogram.auto_size(combined, min_buckets, bucket_size, middle_value, trim_empty_edges=trim_edges)` → finals
 5. Echo `[auto] bucket_size=..., num_buckets=..., middle_value=...` to **stderr**
 6. Build `Histogram(num_buckets, bucket_size, middle_value, max_bar_height=max_bar_width)`
 7. Build `DataSet` per column, `h << ds`
@@ -248,6 +251,7 @@ combined data). This only makes sense when columns are in comparable units.
 | `middle_value ≡ bucket_size/2 (mod bucket_size)` | Ensures all edges land on exact multiples of bucket_size (not half-steps) |
 | `num_buckets` always odd | Symmetric around `middle_value`; middle bucket is exactly centred |
 | `+4` cushion in num_buckets formula | 2 edge overflow buckets + 2 breathing room so bulk data doesn't crowd edges |
+| `trim_empty_edges` (default True) | Collapses interior buckets that would be empty because of median-centring but carry no data, tracking the actual data spread better |
 | Outliers go to ±Inf edge buckets, never inflate count | Core philosophy: outliers are "accounted for" not "accommodated" |
 | No numpy dependency | IQR/percentile is <15 lines of pure Python; keep deps minimal |
 | Combined data for multi-column auto_size | Simplest correct behaviour; document that columns should be same-unit |
@@ -284,10 +288,11 @@ ascii-histogram /tmp/t.txt --stats
 ## Git history summary
 
 ```
+a05d90b  docs: update README for edge-trimming feature
+86e8e75  Add edge-trimming to auto_size; add latency test dataset
+5007c19  Add AGENTS.md: compressed project knowledge for agentic sessions
 eb9a807  Fix docs: remove stale duplicate content, update CONTRIBUTING examples
 84f75c8  Add auto-sizing: IQR-based bucket_size, clean edges, smart num_buckets
-6c701ba  Port Ruby histogram to Python; add CLI and packaging
-3c62e6b  Initial commit
 ```
 
 ---
@@ -297,6 +302,7 @@ eb9a807  Fix docs: remove stale duplicate content, update CONTRIBUTING examples
 **Done:**
 - Full port from Ruby; all original functionality preserved
 - Auto-sizing (the hard problem) — solved and working well
+- Edge-trimming to eliminate empty interior buckets
 - `uv pip install .` compatible packaging
 - Rich-click CLI with good help output
 - README, CHANGELOG, CONTRIBUTING all clean
